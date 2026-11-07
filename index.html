@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>G&amp;S · Control de HH</title>
+<meta name="theme-color" content="#0f2d3a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Control HH">
+<style>
+  html,body{margin:0;height:100%;background:#0f2d3a;font-family:Arial,Helvetica,sans-serif;overflow:hidden}
+  iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}
+  #inst{position:fixed;right:16px;bottom:16px;z-index:5;display:none;align-items:center;gap:10px;
+        background:#e2661b;color:#fff;border:0;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:bold;
+        box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer}
+  #inst img{width:22px;height:22px;border-radius:5px;background:#fff}
+  #inst .x{margin-left:4px;opacity:.8;font-weight:normal}
+  #ios{position:fixed;left:16px;right:16px;bottom:16px;z-index:5;display:none;background:#fff;color:#18202f;border-radius:12px;
+       padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:14px;line-height:1.4}
+  #ios b{color:#e2661b}
+</style>
+</head>
+<body>
+<iframe id="app" title="Control de HH" allow="clipboard-read; clipboard-write; fullscreen; downloads"
+  src="https://script.google.com/macros/s/AKfycbw8hUTL8AAmD9947n5aYKm6hRLfZtRsDHGSko_N5dQNvhIpcXSYic9_Q0uzkXZsR2WVGw/exec"></iframe>
+
+<button id="inst" type="button"><img src="icon-192.png" alt="">Instalar la aplicación <span class="x" id="instx" title="Ahora no">✕</span></button>
+<div id="ios">Para instalarla en tu iPhone: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>. <span id="iosx" style="float:right;cursor:pointer">✕</span></div>
+
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+  var ev = null, b = document.getElementById('inst');
+  var instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  function no(){ try { return localStorage.getItem('gys-no-inst') === '1'; } catch(e){ return false; } }
+  function setNo(){ try { localStorage.setItem('gys-no-inst', '1'); } catch(e){} }
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault(); ev = e;
+    if (!instalada && !no()) b.style.display = 'flex';
+  });
+  b.addEventListener('click', function(e){
+    if (e.target.id === 'instx') { b.style.display = 'none'; setNo(); return; }
+    if (!ev) return; ev.prompt(); ev.userChoice.finally(function(){ ev = null; b.style.display = 'none'; });
+  });
+  window.addEventListener('appinstalled', function(){ b.style.display = 'none'; });
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !instalada && !no()) document.getElementById('ios').style.display = 'block';
+  document.getElementById('iosx').onclick = function(){ document.getElementById('ios').style.display = 'none'; setNo(); };
+</script>
+</body>
+</html>
