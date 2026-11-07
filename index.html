@@ -6,8 +6,8 @@
 <title>G&amp;S · Control de HH</title>
 <meta name="theme-color" content="#0f2d3a">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Control HH">
@@ -22,13 +22,22 @@
   #ios{position:fixed;left:16px;right:16px;bottom:16px;z-index:5;display:none;background:#fff;color:#18202f;border-radius:12px;
        padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:14px;line-height:1.4}
   #ios b{color:#e2661b}
+  #ntf{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:none;width:min(440px,calc(100% - 24px));background:#fff;color:#18202f;
+       border-radius:14px;padding:14px 16px;box-shadow:0 12px 34px rgba(0,0,0,.28);font-size:14px;line-height:1.4;gap:12px;align-items:center}
+  #ntf .ic{flex:none;width:40px;height:40px;border-radius:11px;background:#fde8da;display:grid;place-items:center;font-size:21px}
+  #ntf b{display:block;font-size:15px}
+  #ntf .bt{display:flex;gap:8px;margin-top:9px}
+  #ntf button{border:0;border-radius:999px;padding:8px 14px;font-weight:bold;font-size:13.5px;cursor:pointer}
+  #ntf .si{background:#e2661b;color:#fff}
+  #ntf .no{background:#eef1f6;color:#5c6679}
 </style>
 </head>
 <body>
 <iframe id="app" title="Control de HH" allow="clipboard-read; clipboard-write; fullscreen; downloads"
   src="https://script.google.com/macros/s/AKfycbw8hUTL8AAmD9947n5aYKm6hRLfZtRsDHGSko_N5dQNvhIpcXSYic9_Q0uzkXZsR2WVGw/exec"></iframe>
 
-<button id="inst" type="button"><img src="icon-192.png" alt="">Instalar la aplicación <span class="x" id="instx" title="Ahora no">✕</span></button>
+<button id="inst" type="button"><img src="icon-192.png?v=2" alt="">Instalar la aplicación <span class="x" id="instx" title="Ahora no">✕</span></button>
+<div id="ntf"><span class="ic">🔔</span><div><b>¿Te avisamos para registrar tus HH?</b>Recibe recordatorios, aprobaciones y observaciones como notificación.<div class="bt"><button class="si" id="ntf-si">Activar</button><button class="no" id="ntf-no">Ahora no</button></div></div></div>
 <div id="ios">Para instalarla en tu iPhone: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>. <span id="iosx" style="float:right;cursor:pointer">✕</span></div>
 
 <script>
@@ -48,6 +57,48 @@
   window.addEventListener('appinstalled', function(){ b.style.display = 'none'; });
   if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !instalada && !no()) document.getElementById('ios').style.display = 'block';
   document.getElementById('iosx').onclick = function(){ document.getElementById('ios').style.display = 'none'; setNo(); };
+
+  /* ---------- Notificaciones (Firebase Cloud Messaging) ---------- */
+  var src = null, cfg = null, fbm = null, vistaPend = (location.hash || '').replace('#', '') || null;
+  var FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  function okOrigen(o){ return /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/.test(o) || /^http:\/\/localhost(:\d+)?$/.test(o); }
+  function permiso(){ if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return 'nosoporta'; return Notification.permission; }
+  function enviar(m){ try { if (src) src.postMessage(m, '*'); } catch(e){} }
+  function script(u){ return new Promise(function(ok, mal){ var s = document.createElement('script'); s.src = u; s.onload = ok; s.onerror = function(){ mal(new Error('sin conexión con Firebase')); }; document.head.appendChild(s); }); }
+  function cargarFB(){
+    if (fbm) return Promise.resolve(fbm);
+    return script(FB + 'firebase-app-compat.js').then(function(){ return script(FB + 'firebase-messaging-compat.js'); })
+      .then(function(){ if (!firebase.apps.length) firebase.initializeApp(cfg.fb); fbm = firebase.messaging(); return fbm; });
+  }
+  function equipo(){ var u = navigator.userAgent; return (/Android/i.test(u) ? 'Android' : /iPhone|iPad/i.test(u) ? 'iPhone' : /Windows/i.test(u) ? 'Windows' : /Mac/i.test(u) ? 'Mac' : 'Equipo') + ' · ' + (/Edg\//.test(u) ? 'Edge' : /Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : 'Navegador'); }
+  function obtenerToken(){
+    if (!cfg) return;
+    navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; })
+      .then(function(reg){ return cargarFB().then(function(m){ return m.getToken({ vapidKey: cfg.vapid, serviceWorkerRegistration: reg }); }); })
+      .then(function(t){ if (t) enviar({ gys: 'token', token: t, equipo: equipo() }); })
+      .catch(function(err){ enviar({ gys: 'error', msg: 'No se pudieron activar las notificaciones: ' + (err && err.message || err) }); });
+  }
+  var nb = document.getElementById('ntf');
+  function banner(v){ nb.style.display = v ? 'flex' : 'none'; }
+  function pedir(){
+    banner(false);
+    if (permiso() === 'nosoporta') { enviar({ gys: 'wrap', permiso: 'nosoporta' }); return; }
+    Notification.requestPermission().then(function(p){ enviar({ gys: 'wrap', permiso: p }); if (p === 'granted') obtenerToken(); });
+  }
+  document.getElementById('ntf-si').onclick = pedir;
+  document.getElementById('ntf-no').onclick = function(){ banner(false); try { localStorage.setItem('gys-no-push', String(Date.now())); } catch(e){} };
+  function pospuesto(){ try { var t = +localStorage.getItem('gys-no-push'); return t && Date.now() - t < 3 * 864e5; } catch(e){ return false; } }   // vuelve a preguntar a los 3 días
+  window.addEventListener('message', function(e){
+    if (!okOrigen(e.origin)) return; var d = e.data || {};
+    if (d.gys === 'hola') {
+      src = e.source; cfg = d.cfg && d.cfg.fb && d.cfg.vapid ? d.cfg : null;
+      var p = permiso(); enviar({ gys: 'wrap', permiso: p });
+      if (cfg && p === 'granted') obtenerToken();
+      else if (cfg && p === 'default' && !pospuesto() && (instalada || !/iphone|ipad|ipod/i.test(navigator.userAgent))) banner(true);
+      if (vistaPend) { enviar({ gys: 'ir', vista: vistaPend }); vistaPend = null; history.replaceState(null, '', location.pathname); }
+    } else if (d.gys === 'pedir') pedir();
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function(e){ if (e.data && e.data.gys === 'ir') enviar(e.data); });
 </script>
 </body>
 </html>

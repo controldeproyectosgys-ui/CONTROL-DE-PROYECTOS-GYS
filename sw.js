@@ -1,9 +1,28 @@
 // Service worker mínimo: hace que el navegador ofrezca "Instalar" y guarda la portada para abrir rápido.
-const C = 'gys-hh-v1', BASE = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const C = 'gys-hh-v3', BASE = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png?v=2', 'icon-512.png?v=2'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(BASE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== C).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin) return;   // la app de Google va directo, sin caché
   e.respondWith(fetch(e.request).then(r => { const cp = r.clone(); caches.open(C).then(c => c.put(e.request, cp)); return r; }).catch(() => caches.match(e.request)));
+});
+
+// Notificaciones: llegan desde Firebase con { data: { titulo, cuerpo, vista } }
+self.addEventListener('push', e => {
+  let j = {}; try { j = e.data ? e.data.json() : {}; } catch (x) { j = { data: { cuerpo: e.data ? e.data.text() : '' } }; }
+  const d = j.data || j.notification || j;
+  const titulo = d.titulo || d.title || 'G&S · Control de HH';
+  e.waitUntil(self.registration.showNotification(titulo, {
+    body: d.cuerpo || d.body || '', icon: 'icon-192.png?v=2', badge: 'icon-192.png?v=2',
+    tag: d.vista ? 'gys-' + d.vista : undefined, renotify: !!d.vista, data: { vista: d.vista || '' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const vista = (e.notification.data || {}).vista || '';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(l => {
+    for (const c of l) { if (c.url.startsWith(self.registration.scope)) { if (vista) c.postMessage({ gys: 'ir', vista }); return c.focus(); } }
+    return clients.openWindow('./' + (vista ? '#' + vista : ''));
+  }));
 });
